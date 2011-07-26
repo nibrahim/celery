@@ -10,6 +10,7 @@ BACKEND_ALIASES = {
     "tyrant": "celery.backends.tyrant.TyrantBackend",
     "database": "celery.backends.database.DatabaseBackend",
     "cassandra": "celery.backends.cassandra.CassandraBackend",
+    "couch" : "celery.backends.couch.CouchDBBackend",
     "disabled": "celery.backends.base.DisabledBackend",
 }
 
