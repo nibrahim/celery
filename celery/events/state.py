@@ -1,3 +1,22 @@
+"""
+
+celery.events.state
+===================
+
+This module implements a way to keep track of the
+state of a cluster of workers and the tasks it is working on
+by consuming events.
+
+For every event consumed the state is updated, so
+it represents the state of the cluster at the time
+of the last event.
+
+Snapshots (:mod:`celery.events.snapshot`) can be used
+to take pictures of this state at regular intervals
+and e.g. store it inside a database.
+
+"""
+
 from __future__ import absolute_import
 from __future__ import with_statement
 
@@ -6,9 +25,11 @@ import heapq
 
 from threading import Lock
 
-from celery import states
-from celery.datastructures import AttributeDict, LocalCache
-from celery.utils import kwdict
+from .. import states
+from ..datastructures import AttributeDict, LRUCache
+from ..utils import kwdict
+
+__all__ = ["HEARTBEAT_EXPIRE", "Worker", "Task", "State", "state"]
 
 #: Hartbeat expiry time in seconds.  The worker will be considered offline
 #: if no heartbeat is received within this time.
@@ -173,8 +194,8 @@ class State(object):
 
     def __init__(self, callback=None,
             max_workers_in_memory=5000, max_tasks_in_memory=10000):
-        self.workers = LocalCache(max_workers_in_memory)
-        self.tasks = LocalCache(max_tasks_in_memory)
+        self.workers = LRUCache(limit=max_workers_in_memory)
+        self.tasks = LRUCache(limit=max_tasks_in_memory)
         self.event_callback = callback
         self.group_handlers = {"worker": self.worker_event,
                                "task": self.task_event}

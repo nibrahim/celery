@@ -11,6 +11,7 @@ Application Base Class.
 from __future__ import absolute_import
 from __future__ import with_statement
 
+import os
 import platform as _platform
 import sys
 
@@ -19,11 +20,10 @@ from copy import deepcopy
 from functools import wraps
 from threading import Lock
 
-from kombu.utils import cached_property
+from .. import datastructures
+from ..utils import cached_property, instantiate, lpmerge
 
-from celery import datastructures
-from celery.app.defaults import DEFAULTS
-from celery.utils import instantiate, lpmerge
+from .defaults import DEFAULTS, find_deprecated_settings
 
 import kombu
 if kombu.VERSION < (1, 1, 0):
@@ -51,7 +51,7 @@ def pyimplementation():
 
 
 class LamportClock(object):
-    """Lamports logical clock.
+    """Lamport's logical clock.
 
     From Wikipedia:
 
@@ -80,7 +80,7 @@ class LamportClock(object):
 
     When sending a message use :meth:`forward` to increment the clock,
     when receiving a message use :meth:`adjust` to sync with
-    the timestamp of the incoming message.
+    the time stamp of the incoming message.
 
     """
     #: The clocks current value.
@@ -120,6 +120,13 @@ class Settings(datastructures.ConfigurationView):
         """Deprecated compat alias to :attr:`BROKER_TRANSPORT`."""
         return self.BROKER_TRANSPORT
 
+    @property
+    def BROKER_HOST(self):
+
+        return (os.environ.get("CELERY_BROKER_URL") or
+                self.get("BROKER_URL") or
+                self.get("BROKER_HOST"))
+
 
 class BaseApp(object):
     """Base class for apps."""
@@ -138,7 +145,7 @@ class BaseApp(object):
 
     def __init__(self, main=None, loader=None, backend=None,
             amqp=None, events=None, log=None, control=None,
-            set_as_current=True, accept_magic_kwargs=False):
+            set_as_current=True, accept_magic_kwargs=False, **kwargs):
         self.main = main
         self.amqp_cls = amqp or self.amqp_cls
         self.backend_cls = backend or self.backend_cls
@@ -228,13 +235,13 @@ class BaseApp(object):
 
     def AsyncResult(self, task_id, backend=None, task_name=None):
         """Create :class:`celery.result.BaseAsyncResult` instance."""
-        from celery.result import BaseAsyncResult
+        from ..result import BaseAsyncResult
         return BaseAsyncResult(task_id, app=self, task_name=task_name,
                                backend=backend or self.backend)
 
     def TaskSetResult(self, taskset_id, results, **kwargs):
         """Create :class:`celery.result.TaskSetResult` instance."""
-        from celery.result import TaskSetResult
+        from ..result import TaskSetResult
         return TaskSetResult(taskset_id, results, app=self)
 
     def broker_connection(self, hostname=None, userid=None,
@@ -308,6 +315,7 @@ class BaseApp(object):
 
     def prepare_config(self, c):
         """Prepare configuration before it is merged with the defaults."""
+        find_deprecated_settings(c)
         return c
 
     def mail_admins(self, subject, body, fail_silently=False):
@@ -321,7 +329,8 @@ class BaseApp(object):
                                        user=self.conf.EMAIL_HOST_USER,
                                        password=self.conf.EMAIL_HOST_PASSWORD,
                                        timeout=self.conf.EMAIL_TIMEOUT,
-                                       use_ssl=self.conf.EMAIL_USE_SSL)
+                                       use_ssl=self.conf.EMAIL_USE_SSL,
+                                       use_tls=self.conf.EMAIL_USE_TLS)
 
     def either(self, default_key, *values):
         """Fallback to the value of a configuration key if none of the
@@ -337,7 +346,7 @@ class BaseApp(object):
         return lpmerge(l, r)
 
     def _get_backend(self):
-        from celery.backends import get_backend_cls
+        from ..backends import get_backend_cls
         backend_cls = self.backend_cls or self.conf.CELERY_RESULT_BACKEND
         backend_cls = get_backend_cls(backend_cls, loader=self.loader)
         return backend_cls(app=self)
@@ -382,7 +391,7 @@ class BaseApp(object):
 
     @cached_property
     def backend(self):
-        """Storing/retreiving task state.  See
+        """Storing/retrieving task state.  See
         :class:`~celery.backend.base.BaseBackend`."""
         return self._get_backend()
 
@@ -405,7 +414,7 @@ class BaseApp(object):
     @cached_property
     def loader(self):
         """Current loader."""
-        from celery.loaders import get_loader_cls
+        from ..loaders import get_loader_cls
         return get_loader_cls(self.loader_cls)(app=self)
 
     @cached_property

@@ -1,11 +1,14 @@
+from __future__ import absolute_import
+from __future__ import with_statement
+
 import sys
-from celery.tests.utils import unittest
 from Queue import Queue
 
-from celery.datastructures import ExceptionInfo, LocalCache
-from celery.datastructures import LimitedSet, consume_queue
+from celery.datastructures import ExceptionInfo, LRUCache
+from celery.datastructures import LimitedSet
 from celery.datastructures import AttributeDict, DictAttribute
 from celery.datastructures import ConfigurationView
+from celery.tests.utils import unittest
 
 
 class Object(object):
@@ -21,7 +24,8 @@ class test_DictAttribute(unittest.TestCase):
         self.assertEqual(x["foo"], x.obj.foo)
         self.assertEqual(x.get("foo"), "The quick brown fox")
         self.assertIsNone(x.get("bar"))
-        self.assertRaises(KeyError, x.__getitem__, "bar")
+        with self.assertRaises(KeyError):
+            x["bar"]
 
     def test_setdefault(self):
         x = DictAttribute(Object())
@@ -91,18 +95,6 @@ class test_ExceptionInfo(unittest.TestCase):
         self.assertTrue(r)
 
 
-class test_utilities(unittest.TestCase):
-
-    def test_consume_queue(self):
-        x = Queue()
-        it = consume_queue(x)
-        self.assertRaises(StopIteration, it.next)
-        x.put("foo")
-        it = consume_queue(x)
-        self.assertEqual(it.next(), "foo")
-        self.assertRaises(StopIteration, it.next)
-
-
 class test_LimitedSet(unittest.TestCase):
 
     def test_add(self):
@@ -133,15 +125,32 @@ class test_LimitedSet(unittest.TestCase):
         self.assertIn("LimitedSet(", repr(s))
 
 
-class test_LocalCache(unittest.TestCase):
+class test_LRUCache(unittest.TestCase):
 
     def test_expires(self):
         limit = 100
-        x = LocalCache(limit=limit)
-        slots = list(range(limit * 2))
+        x = LRUCache(limit=limit)
+        slots = list(xrange(limit * 2))
         for i in slots:
             x[i] = i
-        self.assertListEqual(x.keys(), slots[limit:])
+        self.assertListEqual(x.keys(), list(slots[limit:]))
+
+    def test_least_recently_used(self):
+        x = LRUCache(3)
+
+        x[1], x[2], x[3] = 1, 2, 3
+        self.assertEqual(x.keys(), [1, 2, 3])
+
+        x[4], x[5] = 4, 5
+        self.assertEqual(x.keys(), [3, 4, 5])
+
+        # access 3, which makes it the last used key.
+        x[3]
+        x[6] = 6
+        self.assertEqual(x.keys(), [5, 3, 6])
+
+        x[7] = 7
+        self.assertEqual(x.keys(), [3, 6, 7])
 
 
 class test_AttributeDict(unittest.TestCase):
@@ -149,6 +158,7 @@ class test_AttributeDict(unittest.TestCase):
     def test_getattr__setattr(self):
         x = AttributeDict({"foo": "bar"})
         self.assertEqual(x["foo"], "bar")
-        self.assertRaises(AttributeError, getattr, x, "bar")
+        with self.assertRaises(AttributeError):
+            x.bar
         x.bar = "foo"
         self.assertEqual(x["bar"], "foo")

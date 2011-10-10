@@ -1,7 +1,7 @@
-from __future__ import absolute_import
-from __future__ import with_statement
-
 """
+
+celery.worker.consumer
+======================
 
 This module contains the component responsible for consuming messages
 from the broker, processing the messages and keeping the broker connections
@@ -18,7 +18,7 @@ up and running.
   consumer (+ QoS), and the broadcast remote control command consumer.
 
   Also if events are enabled it configures the event dispatcher and starts
-  up the hartbeat thread.
+  up the heartbeat thread.
 
 * Finally it can consume messages. :meth:`~Consumer.consume_messages`
   is simply an infinite loop waiting for events on the AMQP channels.
@@ -60,7 +60,7 @@ up and running.
 
 * Notice that when the connection is lost all internal queues are cleared
   because we can no longer ack the messages reserved in memory.
-  Hoever, this is not dangerous as the broker will resend them
+  However, this is not dangerous as the broker will resend them
   to another worker when the channel is closed.
 
 * **WARNING**: :meth:`~Consumer.stop` does not close the connection!
@@ -70,22 +70,27 @@ up and running.
   early, *then* close the connection.
 
 """
+from __future__ import absolute_import
+from __future__ import with_statement
+
 import socket
 import sys
 import threading
 import traceback
 import warnings
 
-from celery.app import app_or_default
-from celery.datastructures import AttributeDict
-from celery.exceptions import NotRegistered
-from celery.utils import noop
-from celery.utils import timer2
-from celery.utils.encoding import safe_repr
-from celery.worker import state
-from celery.worker.job import TaskRequest, InvalidTaskError
-from celery.worker.control.registry import Panel
-from celery.worker.heartbeat import Heart
+from ..app import app_or_default
+from ..datastructures import AttributeDict
+from ..exceptions import NotRegistered
+from ..utils import noop
+from ..utils import timer2
+from ..utils.encoding import safe_repr
+from . import state
+from .job import TaskRequest, InvalidTaskError
+from .control.registry import Panel
+from .heartbeat import Heart
+
+__all__ = ["QoS", "Consumer"]
 
 RUN = 0x1
 CLOSE = 0x2
@@ -116,6 +121,10 @@ message protocol as described here: http://bit.ly/hYj41y
 
 The full contents of the message body was:
 %s
+"""
+
+MESSAGE_REPORT_FMT = """\
+body: %s {content_type:%s content_encoding:%s delivery_info:%s}\
 """
 
 
@@ -173,11 +182,10 @@ class QoS(object):
         if pcount != self.prev:
             new_value = pcount
             if pcount > PREFETCH_COUNT_MAX:
-                self.logger.warning(
-                    "QoS: Disabled: prefetch_count exceeds %r" % (
-                        PREFETCH_COUNT_MAX, ))
+                self.logger.warning("QoS: Disabled: prefetch_count exceeds %r",
+                                    PREFETCH_COUNT_MAX)
                 new_value = 0
-            self.logger.debug("basic.qos: prefetch_count->%s" % new_value)
+            self.logger.debug("basic.qos: prefetch_count->%s", new_value)
             self.consumer.qos(prefetch_count=new_value)
             self.prev = pcount
         return pcount
@@ -190,7 +198,7 @@ class QoS(object):
 
 class Consumer(object):
     """Listen for messages received from the broker and
-    move them the the ready queue for task processing.
+    move them to the ready queue for task processing.
 
     :param ready_queue: See :attr:`ready_queue`.
     :param eta_schedule: See :attr:`eta_schedule`.
@@ -285,7 +293,7 @@ class Consumer(object):
     def start(self):
         """Start the consumer.
 
-        Automatically surivives intermittent connection failure,
+        Automatically survives intermittent connection failure,
         and will retry establishing the connection and restart
         consuming messages.
 
@@ -299,7 +307,7 @@ class Consumer(object):
                 self.consume_messages()
             except self.connection_errors:
                 self.logger.error("Consumer: Connection to broker lost."
-                                + " Trying to re-establish connection...",
+                                + " Trying to re-establish the connection...",
                                 exc_info=sys.exc_info())
 
     def consume_messages(self):
@@ -330,7 +338,7 @@ class Consumer(object):
         if task.revoked():
             return
 
-        self.logger.info("Got task from broker: %s" % (task.shortinfo(), ))
+        self.logger.info("Got task from broker: %s", task.shortinfo())
 
         if self.event_dispatcher.enabled:
             self.event_dispatcher.send("task-received", uuid=task.task_id,
@@ -344,8 +352,8 @@ class Consumer(object):
                 eta = timer2.to_timestamp(task.eta)
             except OverflowError, exc:
                 self.logger.error(
-                    "Couldn't convert eta %s to timestamp: %r. Task: %r" % (
-                        task.eta, exc, task.info(safe=True)),
+                    "Couldn't convert eta %s to timestamp: %r. Task: %r",
+                    task.eta, exc, task.info(safe=True),
                     exc_info=sys.exc_info())
                 task.acknowledge()
             else:
@@ -361,11 +369,11 @@ class Consumer(object):
         try:
             self.pidbox_node.handle_message(body, message)
         except KeyError, exc:
-            self.logger.error("No such control command: %s" % exc)
+            self.logger.error("No such control command: %s", exc)
         except Exception, exc:
             self.logger.error(
-                "Error occurred while handling control command: %r\n%r" % (
-                    exc, traceback.format_exc()), exc_info=sys.exc_info())
+                "Error occurred while handling control command: %r\n%r",
+                    exc, traceback.format_exc(), exc_info=sys.exc_info())
             self.reset_pidbox_node()
 
     def apply_eta_task(self, task):
@@ -375,6 +383,12 @@ class Consumer(object):
         self.ready_queue.put(task)
         self.qos.decrement_eventually()
 
+    def _message_report(self, body, message):
+        return MESSAGE_REPORT_FMT % (safe_repr(body),
+                                     safe_repr(message.content_type),
+                                     safe_repr(message.content_encoding),
+                                     safe_repr(message.delivery_info))
+
     def receive_message(self, body, message):
         """Handles incoming messages.
 
@@ -382,20 +396,23 @@ class Consumer(object):
         :param message: The kombu message object.
 
         """
-        # need to guard against errors occuring while acking the message.
+        # need to guard against errors occurring while acking the message.
         def ack():
             try:
                 message.ack()
             except self.connection_errors + (AttributeError, ), exc:
                 self.logger.critical(
-                    "Couldn't ack %r: body:%r reason:%r" % (
-                        message.delivery_tag, safe_repr(body), exc))
+                    "Couldn't ack %r: %s reason:%r",
+                        message.delivery_tag,
+                        self._message_report(body, message), exc)
 
-        if not body.get("task"):
+        try:
+            body["task"]
+        except (KeyError, TypeError):
             warnings.warn(RuntimeWarning(
                 "Received and deleted unknown message. Wrong destination?!? \
                 the full contents of the message body was: %s" % (
-                 safe_repr(body), )))
+                 self._message_report(body, message), )))
             ack()
             return
 
@@ -407,12 +424,12 @@ class Consumer(object):
                                             eventer=self.event_dispatcher)
 
         except NotRegistered, exc:
-            self.logger.error(UNKNOWN_TASK_ERROR % (
-                    exc, safe_repr(body)), exc_info=sys.exc_info())
+            self.logger.error(UNKNOWN_TASK_ERROR, exc, safe_repr(body),
+                              exc_info=sys.exc_info())
             ack()
         except InvalidTaskError, exc:
-            self.logger.error(INVALID_TASK_ERROR % (
-                    str(exc), safe_repr(body)), exc_info=sys.exc_info())
+            self.logger.error(INVALID_TASK_ERROR, str(exc), safe_repr(body),
+                              exc_info=sys.exc_info())
             ack()
         else:
             self.on_task(task)
@@ -487,9 +504,9 @@ class Consumer(object):
 
         """
         self.logger.critical(
-            "Can't decode message body: %r (type:%r encoding:%r raw:%r')" % (
+            "Can't decode message body: %r (type:%r encoding:%r raw:%r')",
                     exc, message.content_type, message.content_encoding,
-                    safe_repr(message.body)))
+                    safe_repr(message.body))
         message.ack()
 
     def reset_pidbox_node(self):
@@ -545,7 +562,7 @@ class Consumer(object):
                        self.initial_prefetch_count, self.logger)
         self.qos.update()
 
-        # receive_message handles incomsing messages.
+        # receive_message handles incoming messages.
         self.task_consumer.register_callback(self.receive_message)
 
         # Setup the process mailbox.
@@ -570,7 +587,7 @@ class Consumer(object):
         """Restart the heartbeat thread.
 
         This thread sends heartbeat events at intervals so monitors
-        can tell if the worker is offline/missing.
+        can tell if the worker is off-line/missing.
 
         """
         self.heart = Heart(self.priority_timer, self.event_dispatcher)
@@ -587,8 +604,8 @@ class Consumer(object):
         # Callback called for each retry while the connection
         # can't be established.
         def _error_handler(exc, interval):
-            self.logger.error("Consumer: Connection Error: %s. " % exc
-                            + "Trying again in %d seconds..." % interval)
+            self.logger.error("Consumer: Connection Error: %s. "
+                              "Trying again in %d seconds...", exc, interval)
 
         # remember that the connection is lazy, it won't establish
         # until it's needed.
@@ -630,4 +647,4 @@ class Consumer(object):
         return {"broker": conninfo, "prefetch_count": self.qos.value}
 
     def _debug(self, msg, **kwargs):
-        self.logger.debug("Consumer: %s" % (msg, ), **kwargs)
+        self.logger.debug("Consumer: %s", msg, **kwargs)

@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from __future__ import with_statement
 
 import sys
@@ -8,10 +9,11 @@ from textwrap import wrap
 
 from anyjson import deserialize
 
-from celery import __version__
-from celery.app import app_or_default, current_app
-from celery.bin.base import Command as CeleryCommand
-from celery.utils import term
+from .. import __version__
+from ..app import app_or_default, current_app
+from ..utils import term
+
+from .base import Command as CeleryCommand
 
 
 commands = {}
@@ -201,7 +203,7 @@ class result(Command):
     )
 
     def run(self, task_id, *args, **kwargs):
-        from celery import registry
+        from .. import registry
         result_cls = self.app.AsyncResult
         task = kwargs.get("task")
 
@@ -331,8 +333,22 @@ class celeryctl(CeleryCommand):
         except Error:
             return self.execute("help", argv)
 
+    def remove_options_at_beginning(self, argv, index=0):
+        if argv:
+            while index <= len(argv):
+                value = argv[index]
+                if value.startswith("--"):
+                    pass
+                elif value.startswith("-"):
+                    index += 1
+                else:
+                    return argv[index:]
+                index += 1
+        return []
+
     def handle_argv(self, prog_name, argv):
         self.prog_name = prog_name
+        argv = self.remove_options_at_beginning(argv)
         try:
             command = argv[0]
         except IndexError:

@@ -20,8 +20,8 @@
     celery.concurrency.solo
     celery.concurrency.processes
     celery.concurrency.processes.pool
-    celery.concurrency.evlet
-    celery.concurrency.evg
+    celery.concurrency.eventlet
+    celery.concurrency.gevent
     celery.concurrency.base
     celery.concurrency.threads
     celery.beat
@@ -48,7 +48,6 @@
     celery.utils.timeutils
     celery.utils.encoding
     celery.utils.compat
-    celery.utils.mail
     celery.utils.patch
     celery.utils.serialization
     celery.utils.timer2

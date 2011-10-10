@@ -159,6 +159,14 @@ celeryd is not doing anything, just hanging
 **Answer:** See `MySQL is throwing deadlock errors, what can I do?`_.
             or `Why is Task.delay/apply\* just hanging?`.
 
+.. _faq-results-unreliable:
+
+Task results aren't reliably returning
+--------------------------------------
+
+**Answer:** If you're using the database backend for results, and in particular
+using MySQL, see `MySQL is throwing deadlock errors, what can I do?`_.
+
 .. _faq-publish-hanging:
 
 Why is Task.delay/apply\*/celeryd just hanging?
@@ -453,7 +461,8 @@ Tasks
 How can I reuse the same connection when applying tasks?
 --------------------------------------------------------
 
-**Answer**: See :ref:`executing-connections`.
+**Answer**: See the :setting:`BROKER_POOL_LIMIT` setting.
+This setting will be enabled by default in 3.0.
 
 .. _faq-execute-task-by-name:
 

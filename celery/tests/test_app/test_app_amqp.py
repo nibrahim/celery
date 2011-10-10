@@ -1,10 +1,10 @@
+from __future__ import absolute_import
 from __future__ import with_statement
 
 from mock import Mock
 
-from celery.tests.utils import AppCase
-
 from celery.app.amqp import MSG_OPTIONS, extract_msg_options
+from celery.tests.utils import AppCase
 
 
 class TestMsgOptions(AppCase):
@@ -24,10 +24,10 @@ class test_TaskPublisher(AppCase):
     def test__exit__(self):
 
         publisher = self.app.amqp.TaskPublisher(self.app.broker_connection())
-        publisher.close = Mock()
+        publisher.release = Mock()
         with publisher:
             pass
-        publisher.close.assert_called_with()
+        publisher.release.assert_called_with()
 
     def test_ensure_declare_queue(self, q="x1242112"):
         publisher = self.app.amqp.TaskPublisher(Mock())
@@ -90,7 +90,7 @@ class test_PublisherPool(AppCase):
 
             p1 = r1 = pool.acquire()
             p2 = r2 = pool.acquire()
-            delattr(r1.connection, "_publisher_chan")
+            delattr(r1.connection, "_producer_chan")
             r1.release()
             r2.release()
             r1 = pool.acquire()

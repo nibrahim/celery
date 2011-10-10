@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import os
 import sys
 import time
@@ -5,9 +7,9 @@ import traceback
 
 from functools import partial
 
-from celery import log
-from celery.datastructures import ExceptionInfo
-from celery.utils import timer2
+from .. import log
+from ..datastructures import ExceptionInfo
+from ..utils import timer2
 
 
 def apply_target(target, args=(), kwargs={}, callback=None,
@@ -80,8 +82,8 @@ class BasePool(object):
         on_ready = partial(self.on_ready, callback, errback)
         on_worker_error = partial(self.on_worker_error, errback)
 
-        self.logger.debug("TaskPool: Apply %s (args:%s kwargs:%s)" % (
-            target, args, kwargs))
+        self.logger.debug("TaskPool: Apply %s (args:%s kwargs:%s)",
+                          target, args, kwargs)
 
         return self.on_apply(target, args, kwargs,
                              callback=on_ready,
@@ -104,16 +106,17 @@ class BasePool(object):
         else:
             self.safe_apply_callback(callback, ret_value)
 
-    def on_worker_error(self, errback, exc):
-        errback(ExceptionInfo((exc.__class__, exc, None)))
+    def on_worker_error(self, errback, exc_info):
+        errback(exc_info)
 
     def safe_apply_callback(self, fun, *args):
         if fun:
             try:
                 fun(*args)
             except BaseException:
-                self.logger.error("Pool callback raised exception: %s" % (
-                    traceback.format_exc(), ), exc_info=sys.exc_info())
+                self.logger.error("Pool callback raised exception: %s",
+                                  traceback.format_exc(),
+                                  exc_info=sys.exc_info())
 
     def _get_info(self):
         return {}
@@ -125,3 +128,7 @@ class BasePool(object):
     @property
     def active(self):
         return self._state == self.RUN
+
+    @property
+    def num_processes(self):
+        return self.limit

@@ -1,7 +1,8 @@
-from celery.tests.utils import unittest
+from __future__ import absolute_import
 
 from celery import Celery
 from celery.utils import textindent
+from celery.tests.utils import unittest
 
 RANDTEXT = """\
 The quick brown
@@ -39,5 +40,5 @@ class TestInfo(unittest.TestCase):
     def test_format_queues(self):
         celery = Celery(set_as_current=False)
         celery.amqp.queues = celery.amqp.Queues(QUEUES)
-        self.assertItemsEqual(celery.amqp.queues.format().split("\n"),
-                              [QUEUE_FORMAT1, QUEUE_FORMAT2])
+        self.assertEqual(sorted(celery.amqp.queues.format().split("\n")),
+                         sorted([QUEUE_FORMAT1, QUEUE_FORMAT2]))

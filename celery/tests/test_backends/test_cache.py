@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from __future__ import with_statement
 
 import sys
@@ -9,7 +10,7 @@ from celery import states
 from celery.backends.cache import CacheBackend, DummyClient
 from celery.exceptions import ImproperlyConfigured
 from celery.result import AsyncResult
-from celery.utils import gen_unique_id
+from celery.utils import uuid
 
 from celery.tests.utils import unittest, mask_modules, reset_modules
 
@@ -25,7 +26,7 @@ class test_CacheBackend(unittest.TestCase):
     def test_mark_as_done(self):
         tb = CacheBackend(backend="memory://")
 
-        tid = gen_unique_id()
+        tid = uuid()
 
         self.assertEqual(tb.get_status(tid), states.PENDING)
         self.assertIsNone(tb.get_result(tid))
@@ -37,7 +38,7 @@ class test_CacheBackend(unittest.TestCase):
     def test_is_pickled(self):
         tb = CacheBackend(backend="memory://")
 
-        tid2 = gen_unique_id()
+        tid2 = uuid()
         result = {"foo": "baz", "bar": SomeClass(12345)}
         tb.mark_as_done(tid2, result)
         # is serialized properly.
@@ -48,14 +49,14 @@ class test_CacheBackend(unittest.TestCase):
     def test_mark_as_failure(self):
         tb = CacheBackend(backend="memory://")
 
-        tid3 = gen_unique_id()
+        tid3 = uuid()
         try:
             raise KeyError("foo")
         except KeyError, exception:
             pass
-        tb.mark_as_failure(tid3, exception)
-        self.assertEqual(tb.get_status(tid3), states.FAILURE)
-        self.assertIsInstance(tb.get_result(tid3), KeyError)
+            tb.mark_as_failure(tid3, exception)
+            self.assertEqual(tb.get_status(tid3), states.FAILURE)
+            self.assertIsInstance(tb.get_result(tid3), KeyError)
 
     def test_mget(self):
         tb = CacheBackend(backend="memory://")
@@ -67,7 +68,7 @@ class test_CacheBackend(unittest.TestCase):
 
     def test_forget(self):
         tb = CacheBackend(backend="memory://")
-        tid = gen_unique_id()
+        tid = uuid()
         tb.mark_as_done(tid, {"foo": "bar"})
         x = AsyncResult(tid, backend=tb)
         x.forget()
@@ -82,8 +83,8 @@ class test_CacheBackend(unittest.TestCase):
         self.assertEqual(tb.expires, 10)
 
     def test_unknown_backend_raises_ImproperlyConfigured(self):
-        self.assertRaises(ImproperlyConfigured,
-                          CacheBackend, backend="unknown://")
+        with self.assertRaises(ImproperlyConfigured):
+            CacheBackend(backend="unknown://")
 
 
 class MyClient(DummyClient):
